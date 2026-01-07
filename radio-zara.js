@@ -169,6 +169,14 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`   📀 "${track.file}"`);
         console.log(`   🎯 Empezando en segundo: ${posicion.segundoEnCancion}`);
         
+        // DETECTAR PLATAFORMAS EXTERNAS Y FORZAR SINCRONIZACIÓN
+        if (window.location.hostname.includes('mytuner-radio.com') || 
+            window.location.hostname.includes('radios-argentinas.org')) {
+            console.log('🔧 PLATAFORMA EXTERNA DETECTADA - Forzando sincronización');
+            audioPlayer.currentTime = posicion.segundoEnCancion;
+            audioPlayer.src = track.path + '?t=' + Date.now(); // Evitar cache
+        }
+        
         // Limpiar eventos previos
         audioPlayer.onloadedmetadata = null;
         audioPlayer.onerror = null;
