@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // ========== LÍNEA CRÍTICA ==========
         // URL del stream en vivo de BUTT
-        const streamURL = "http://radio01.ferozo.com:9694/stream?t=" + Date.now();
+        const streamURL = "https://radio01.ferozo.com/proxy/ra01001229?mp=/?t=" + Date.now();
         
         // Configurar y reproducir stream
         audioPlayer.src = streamURL;
