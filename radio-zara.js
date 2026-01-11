@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // ========== DETECCIÓN BUTT ==========
     let modoButt = false; // false = playlist, true = BUTT
-    const URL_BUTT = "https://radio01.ferozo.com/proxy/ra01001229?mp=/";
+    const URL_BUTT = "http://radio01.ferozo.com:9694/stream";
     let checkInterval = null;
     
     // ========== CONFIGURACIÓN PROGRAMAS ==========
