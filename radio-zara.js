@@ -1,8 +1,8 @@
-// radio-zara.js - VERSIÓN COMPLETA Y SIMPLE
+// radio-zara.js - VERSIÓN FINAL CORREGIDA (INICIO RÁPIDO)
 document.addEventListener('DOMContentLoaded', function() {
     const playButton = document.getElementById('radioPlayButton');
     const shareButton = document.getElementById('shareRadioButton');
-    const audioPlayer = document.getElementById('radioPlayer');
+    let audioPlayer = document.getElementById('radioPlayer');
     const playPath = document.getElementById('playPath');
     const pausePath1 = document.getElementById('pausePath1');
     const pausePath2 = document.getElementById('pausePath2');
@@ -12,7 +12,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const scheduleGrid = document.querySelector('.schedule-grid');
     
     let isPlaying = false;
-    
+    let currentPlaylist = [];
+    let currentTrackIndex = 0;
+    let playlistLoaded = false;
+    let errorCount = 0;
+    const MAX_ERRORS = 3;
+
     // ========== CONFIGURACIÓN PROGRAMAS ==========
     const programNames = {
         "madrugada": "Radio 404",
@@ -106,41 +111,173 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // ========== LÓGICA RADIO SIMPLE ==========
-    function playRadio() {
-        // LIMPIAR EVENTOS ANTERIORES
+    // ========== LÓGICA RADIO ==========
+    async function loadPlaylist() {
+        if (playlistLoaded) return;
+        
+        try {
+            console.log('📻 Cargando playlist...');
+            const response = await fetch('playlist.json');
+            const data = await response.json();
+            
+            currentPlaylist = data.tracks.map(track => ({
+                path: track,
+                file: track.split('/').pop()
+            }));
+            
+            playlistLoaded = true;
+            console.log(`📻 Playlist cargada: ${currentPlaylist.length} canciones`);
+            
+        } catch (error) {
+            console.error('Error:', error);
+            currentPlaylist = [];
+            currentTrackIndex = 0;
+        }
+    }
+    
+    function calcularPosicionExacta() {
+        const inicioTransmision = new Date('2025-01-01T03:00:00Z');
+        const ahora = new Date();
+        
+        const segundosTranscurridos = Math.floor((ahora - inicioTransmision) / 1000);
+        const segundosPorCancion = 180;
+        const segundosTotalPlaylist = currentPlaylist.length * segundosPorCancion;
+        const posicionEnPlaylist = segundosTranscurridos % segundosTotalPlaylist;
+        
+        currentTrackIndex = Math.floor(posicionEnPlaylist / segundosPorCancion) % currentPlaylist.length;
+        const segundoEnCancion = posicionEnPlaylist % segundosPorCancion;
+        
+        console.log('🎯 SINCRONIZACIÓN EXACTA:');
+        console.log(`   📻 Canción: #${currentTrackIndex + 1}/${currentPlaylist.length}`);
+        console.log(`   ⏱️  Segundo: ${segundoEnCancion}s`);
+        console.log(`   🔗 Todos escuchan lo mismo`);
+        
+        return {
+            trackIndex: currentTrackIndex,
+            segundoEnCancion: segundoEnCancion,
+            track: currentPlaylist[currentTrackIndex]
+        };
+    }
+    
+    function playTransmisionExacta() {
+        if (currentPlaylist.length === 0) return;
+        
+        const posicion = calcularPosicionExacta();
+        const track = posicion.track;
+        
+        console.log(`🎵 Conectando a transmisión:`);
+        console.log(`   📀 "${track.file}"`);
+        console.log(`   🎯 Empezando en segundo: ${posicion.segundoEnCancion}`);
+        
+        // DETECTAR PLATAFORMAS EXTERNAS Y FORZAR SINCRONIZACIÓN
+        if (window.location.hostname.includes('mytuner-radio.com') || 
+            window.location.hostname.includes('radios-argentinas.org')) {
+            console.log('🔧 PLATAFORMA EXTERNA DETECTADA - Forzando sincronización');
+            audioPlayer.currentTime = posicion.segundoEnCancion;
+            audioPlayer.src = track.path + '?t=' + Date.now(); // Evitar cache
+        }
+        
+        // Limpiar eventos previos
+        audioPlayer.onloadedmetadata = null;
         audioPlayer.onerror = null;
         audioPlayer.onended = null;
         
-        // PRIMERO INTENTAR CON SHOUTCAST v1 (URL WEB)
-        audioPlayer.src = "https://radio01.ferozo.com/proxy/ra01001229?mp=/" + "&t=" + Date.now();
+        // Configurar audio
+        audioPlayer.src = track.path;
+        audioPlayer.currentTime = Math.min(posicion.segundoEnCancion, 3600);
         
+        console.log(`   🔊 Tiempo establecido: ${posicion.segundoEnCancion}s`);
+        
+        // Intentar reproducir inmediatamente
         const playPromise = audioPlayer.play();
         
         if (playPromise !== undefined) {
             playPromise.catch(e => {
-                console.error('Error ShoutCast v1:', e.name);
-                // SI FALLA v1, INTENTAR v2 (STREAM DIRECTO)
-                audioPlayer.src = "http://radio01.ferozo.com:9694/stream" + "?t=" + Date.now();
-                audioPlayer.play().catch(e2 => {
-                    console.error('Error ShoutCast v2:', e2.name);
-                    isPlaying = false;
-                    updatePlayButton();
-                });
+                console.error('❌ Error al reproducir:', e.name);
+                setTimeout(() => {
+                    audioPlayer.play().catch(() => {
+                        setTimeout(siguienteCancion, 1000);
+                    });
+                }, 300);
             });
         }
         
-        // MANEJAR ERRORES DURANTE REPRODUCCIÓN
-        audioPlayer.onerror = function() {
-            console.error('Error de audio durante reproducción');
-            // INTENTAR RECONECTAR CON v2
-            if (isPlaying) {
-                setTimeout(() => {
-                    audioPlayer.src = "http://radio01.ferozo.com:9694/stream" + "?t=" + Date.now();
-                    audioPlayer.play();
-                }, 2000);
+        // Configurar eventos
+        audioPlayer.onloadedmetadata = function() {
+            if (Math.abs(audioPlayer.currentTime - posicion.segundoEnCancion) > 2) {
+                audioPlayer.currentTime = Math.min(posicion.segundoEnCancion, 3600);
             }
         };
+        
+        audioPlayer.onended = function() {
+            errorCount = 0;
+            console.log('✅ Canción terminada - Siguiente');
+            siguienteCancion();
+        };
+        
+        audioPlayer.onerror = function() {
+            console.error('❌ Error de audio');
+            errorCount++;
+            
+            if (errorCount >= MAX_ERRORS) {
+                console.error('🚨 Demasiados errores - Deteniendo');
+                isPlaying = false;
+                updatePlayButton();
+                errorCount = 0;
+                return;
+            }
+            
+            setTimeout(siguienteCancion, 1000);
+        };
+    }
+    
+    function siguienteCancion() {
+        if (currentPlaylist.length === 0) return;
+        
+        errorCount = 0;
+        currentTrackIndex = (currentTrackIndex + 1) % currentPlaylist.length;
+        const track = currentPlaylist[currentTrackIndex];
+        
+        console.log(`⏭️ Siguiente canción: #${currentTrackIndex + 1} (${track.file})`);
+        
+        // Limpiar eventos
+        audioPlayer.onloadedmetadata = null;
+        audioPlayer.onerror = null;
+        audioPlayer.onended = null;
+        
+        audioPlayer.src = track.path;
+        audioPlayer.currentTime = 0;
+        
+        if (isPlaying) {
+            const playPromise = audioPlayer.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.catch(e => {
+                    console.error('❌ Error:', e.name);
+                    setTimeout(siguienteCancion, 1000);
+                });
+            }
+            
+            audioPlayer.onerror = function() {
+                console.error('❌ Error de audio');
+                errorCount++;
+                
+                if (errorCount >= MAX_ERRORS) {
+                    console.error('🚨 Demasiados errores - Deteniendo');
+                    isPlaying = false;
+                    updatePlayButton();
+                    errorCount = 0;
+                    return;
+                }
+                
+                setTimeout(siguienteCancion, 1000);
+            };
+            
+            audioPlayer.onended = function() {
+                errorCount = 0;
+                siguienteCancion();
+            };
+        }
     }
     
     function updatePlayButton() {
@@ -166,15 +303,23 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // ========== EVENTOS ==========
-    playButton.addEventListener('click', function() {
+    playButton.addEventListener('click', async function() {
         if (isPlaying) {
             audioPlayer.pause();
             isPlaying = false;
             console.log('⏸️ Pausado');
         } else {
+            if (!playlistLoaded) {
+                await loadPlaylist();
+            }
             isPlaying = true;
-            console.log('▶️ Iniciando radio...');
-            playRadio();
+            
+            console.log('▶️ Conectando a transmisión exacta...');
+            console.log('⚡ INICIO RÁPIDO');
+            
+            setTimeout(() => {
+                playTransmisionExacta();
+            }, 0);
         }
         updatePlayButton();
     });
@@ -182,12 +327,16 @@ document.addEventListener('DOMContentLoaded', function() {
     shareButton.addEventListener('click', shareRadio);
     
     // ========== INICIALIZACIÓN ==========
-    function init() {
-        console.log('🚀 Radio Zara - Versión Simple Completa');
+    async function init() {
+        console.log('🚀 Radio Zara - Versión Final');
+        console.log('🎯 Sincronización exacta por segundo');
+        
+        await loadPlaylist();
         generateScheduleCards();
         setInterval(updateDisplayInfo, 60000);
         updateDisplayInfo();
-        console.log('✅ Radio lista (solo ShoutCast)');
+        
+        console.log('✅ Radio lista');
     }
     
     init();
