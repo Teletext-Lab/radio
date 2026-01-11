@@ -1,8 +1,8 @@
-// radio-zara.js - VERSIÓN FINAL CORREGIDA (INICIO RÁPIDO)
+// radio-zara.js - VERSIÓN HÍBRIDA MEJORADA - COMPLETA Y CORREGIDA
 document.addEventListener('DOMContentLoaded', function() {
     const playButton = document.getElementById('radioPlayButton');
     const shareButton = document.getElementById('shareRadioButton');
-    let audioPlayer = document.getElementById('radioPlayer');
+    const audioPlayer = document.getElementById('radioPlayer');
     const playPath = document.getElementById('playPath');
     const pausePath1 = document.getElementById('pausePath1');
     const pausePath2 = document.getElementById('pausePath2');
@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const currentTimeName = document.getElementById('currentTimeName');
     const currentTimeRange = document.getElementById('currentTimeRange');
     const scheduleGrid = document.querySelector('.schedule-grid');
+    const liveDot = document.querySelector('.live-dot');
+    const liveText = document.querySelector('.live-text');
     
     let isPlaying = false;
     let currentPlaylist = [];
@@ -17,7 +19,15 @@ document.addEventListener('DOMContentLoaded', function() {
     let playlistLoaded = false;
     let errorCount = 0;
     const MAX_ERRORS = 3;
-
+    
+    // ========== CONFIGURACIÓN HÍBRIDA ==========
+    let useShoutcast = true; // Empezamos intentando con ShoutCast
+    let shoutcastURL = "https://radio01.ferozo.com/proxy/ra01001229?mp=/";
+    let checkInterval = null;
+    let lastStreamCheck = 0;
+    let isCheckingStream = false;
+    let streamModeIndicator = null;
+    
     // ========== CONFIGURACIÓN PROGRAMAS ==========
     const programNames = {
         "madrugada": "Radio 404",
@@ -47,6 +57,148 @@ document.addEventListener('DOMContentLoaded', function() {
             {"name": "especial", "displayName": "Especiales txt", "start": "22:00", "end": "00:00"}
         ]
     };
+    
+    // ========== CREAR INDICADOR VISUAL (INTEGRADO CON TU DISEÑO) ==========
+    function createStreamIndicator() {
+        if (!streamModeIndicator) {
+            streamModeIndicator = document.createElement('div');
+            streamModeIndicator.id = 'streamModeIndicator';
+            streamModeIndicator.style.cssText = `
+                position: fixed;
+                top: 70px;
+                right: 20px;
+                background: rgba(10, 10, 10, 0.95);
+                backdrop-filter: blur(10px);
+                color: #00FF37;
+                padding: 8px 15px;
+                border-radius: 6px;
+                font-size: 12px;
+                font-family: 'Helvetica Neue', Arial, sans-serif;
+                z-index: 999;
+                border: 1px solid #00FF37;
+                display: none;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                letter-spacing: 0.5px;
+                font-weight: 600;
+            `;
+            document.body.appendChild(streamModeIndicator);
+        }
+        return streamModeIndicator;
+    }
+    
+    // ========== ACTUALIZAR INDICADOR LIVE-DOT ==========
+    function updateLiveIndicator(isLive) {
+        if (liveDot && liveText) {
+            if (isLive) {
+                liveDot.style.background = '#ff0000';
+                liveDot.style.animation = 'pulse 1.5s infinite';
+                liveText.textContent = 'EN VIVO';
+                liveText.style.color = '#ff0000';
+            } else {
+                liveDot.style.background = '#00FF37';
+                liveDot.style.animation = 'none';
+                liveText.textContent = 'PLAYLIST';
+                liveText.style.color = '#00FF37';
+            }
+        }
+    }
+    
+    // ========== MOSTRAR NOTIFICACIÓN TEMPORAL ==========
+    function showStreamNotification(message, isShoutcast) {
+        const indicator = createStreamIndicator();
+        indicator.textContent = message;
+        indicator.style.borderColor = isShoutcast ? '#ff0000' : '#00FF37';
+        indicator.style.color = isShoutcast ? '#ff0000' : '#00FF37';
+        
+        // Mostrar
+        indicator.style.display = 'block';
+        setTimeout(() => {
+            indicator.style.opacity = '1';
+        }, 10);
+        
+        // Ocultar después de 3 segundos
+        setTimeout(() => {
+            indicator.style.opacity = '0';
+            setTimeout(() => {
+                indicator.style.display = 'none';
+            }, 300);
+        }, 3000);
+    }
+    
+    // ========== DETECCIÓN DE STREAM SHOUTCAST ==========
+    async function checkStreamStatus() {
+        if (isCheckingStream) return false;
+        
+        isCheckingStream = true;
+        const now = Date.now();
+        
+        // Solo chequear cada 40 segundos
+        if (now - lastStreamCheck < 40000) {
+            isCheckingStream = false;
+            return useShoutcast;
+        }
+        
+        lastStreamCheck = now;
+        
+        console.log('📡 Verificando estado de ShoutCast...');
+        
+        return new Promise((resolve) => {
+            const testAudio = new Audio();
+            testAudio.preload = 'none';
+            testAudio.src = shoutcastURL + '?check=' + Date.now();
+            
+            const timeout = setTimeout(() => {
+                // Timeout = ShoutCast no responde
+                console.log('⏰ ShoutCast no responde - Modo Playlist');
+                if (useShoutcast) {
+                    showStreamNotification('🔁 Cambiando a Playlist Local', false);
+                }
+                useShoutcast = false;
+                updateLiveIndicator(false);
+                isCheckingStream = false;
+                resolve(false);
+            }, 6000); // 6 segundos de timeout
+            
+            const cleanup = () => {
+                clearTimeout(timeout);
+                testAudio.removeEventListener('loadedmetadata', onSuccess);
+                testAudio.removeEventListener('error', onError);
+                testAudio.src = '';
+            };
+            
+            const onSuccess = () => {
+                cleanup();
+                console.log('✅ ShoutCast ACTIVO (BUTT transmitiendo)');
+                if (!useShoutcast) {
+                    showStreamNotification('🎙️ Conectado a Transmisión en Vivo', true);
+                }
+                useShoutcast = true;
+                updateLiveIndicator(true);
+                isCheckingStream = false;
+                resolve(true);
+            };
+            
+            const onError = () => {
+                cleanup();
+                console.log('❌ ShoutCast INACTIVO');
+                if (useShoutcast) {
+                    showStreamNotification('💿 Cambiando a Playlist Local', false);
+                }
+                useShoutcast = false;
+                updateLiveIndicator(false);
+                isCheckingStream = false;
+                resolve(false);
+            };
+            
+            testAudio.addEventListener('loadedmetadata', onSuccess, { once: true });
+            testAudio.addEventListener('error', onError, { once: true });
+            
+            // Intentar cargar
+            testAudio.load();
+        });
+    }
     
     // ========== FUNCIONES PROGRAMA ==========
     function getArgentinaTime() {
@@ -111,31 +263,35 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // ========== LÓGICA RADIO ==========
+    // ========== LÓGICA RADIO HÍBRIDA ==========
     async function loadPlaylist() {
         if (playlistLoaded) return;
         
         try {
-            console.log('📻 Cargando playlist...');
+            console.log('📻 Cargando playlist local...');
             const response = await fetch('playlist.json');
             const data = await response.json();
             
+            // Convertir rutas relativas a absolutas para GitHub Pages
+            const baseURL = window.location.origin + '/';
             currentPlaylist = data.tracks.map(track => ({
-                path: track,
+                path: track.startsWith('http') ? track : baseURL + track,
                 file: track.split('/').pop()
             }));
             
             playlistLoaded = true;
-            console.log(`📻 Playlist cargada: ${currentPlaylist.length} canciones`);
+            console.log(`📻 Playlist local cargada: ${currentPlaylist.length} canciones`);
             
         } catch (error) {
-            console.error('Error:', error);
+            console.error('Error cargando playlist:', error);
             currentPlaylist = [];
             currentTrackIndex = 0;
         }
     }
     
     function calcularPosicionExacta() {
+        if (currentPlaylist.length === 0) return { trackIndex: 0, segundoEnCancion: 0, track: null };
+        
         const inicioTransmision = new Date('2025-01-01T03:00:00Z');
         const ahora = new Date();
         
@@ -145,12 +301,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const posicionEnPlaylist = segundosTranscurridos % segundosTotalPlaylist;
         
         currentTrackIndex = Math.floor(posicionEnPlaylist / segundosPorCancion) % currentPlaylist.length;
-        const segundoEnCancion = posicionEnPlaylist % segundosPorCancion;
+        const segundoEnCancion = posicionEnPlaylist % segundosPorCancion; // ← CORREGIDO
         
-        console.log('🎯 SINCRONIZACIÓN EXACTA:');
-        console.log(`   📻 Canción: #${currentTrackIndex + 1}/${currentPlaylist.length}`);
+        console.log('🎯 SINCRONIZACIÓN PLAYLIST LOCAL:');
+        console.log(`   📀 Canción: #${currentTrackIndex + 1}/${currentPlaylist.length}`);
         console.log(`   ⏱️  Segundo: ${segundoEnCancion}s`);
-        console.log(`   🔗 Todos escuchan lo mismo`);
         
         return {
             trackIndex: currentTrackIndex,
@@ -159,22 +314,35 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
     
-    function playTransmisionExacta() {
-        if (currentPlaylist.length === 0) return;
-        
-        const posicion = calcularPosicionExacta();
-        const track = posicion.track;
-        
-        console.log(`🎵 Conectando a transmisión:`);
-        console.log(`   📀 "${track.file}"`);
-        console.log(`   🎯 Empezando en segundo: ${posicion.segundoEnCancion}`);
-        
-        // DETECTAR PLATAFORMAS EXTERNAS Y FORZAR SINCRONIZACIÓN
-        if (window.location.hostname.includes('mytuner-radio.com') || 
-            window.location.hostname.includes('radios-argentinas.org')) {
-            console.log('🔧 PLATAFORMA EXTERNA DETECTADA - Forzando sincronización');
-            audioPlayer.currentTime = posicion.segundoEnCancion;
-            audioPlayer.src = track.path + '?t=' + Date.now(); // Evitar cache
+    function playRadio() {
+        // Primero, verificar estado actual del stream
+        checkStreamStatus().then((shoutcastAvailable) => {
+            if (shoutcastAvailable && useShoutcast) {
+                console.log('🎵 Conectando a SHOUTCAST (transmisión en vivo)...');
+                playShoutcast();
+            } else {
+                console.log('📀 Reproduciendo PLAYLIST LOCAL...');
+                if (!playlistLoaded) {
+                    loadPlaylist().then(() => {
+                        if (currentPlaylist.length > 0) {
+                            playLocal();
+                        } else {
+                            console.error('🚨 Playlist local vacía');
+                            showStreamNotification('⚠️ Playlist local no disponible', false);
+                        }
+                    });
+                } else {
+                    playLocal();
+                }
+            }
+        });
+    }
+    
+    function playShoutcast() {
+        // Detener cualquier reproducción local primero
+        if (audioPlayer.src && !audioPlayer.src.includes('ferozo.com')) {
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
         }
         
         // Limpiar eventos previos
@@ -182,101 +350,128 @@ document.addEventListener('DOMContentLoaded', function() {
         audioPlayer.onerror = null;
         audioPlayer.onended = null;
         
-        // Configurar audio
-        audioPlayer.src = track.path;
-        audioPlayer.currentTime = Math.min(posicion.segundoEnCancion, 3600);
+        // Configurar stream ShoutCast
+        audioPlayer.src = shoutcastURL + '?t=' + Date.now(); // Evitar cache
+        audioPlayer.currentTime = 0;
         
-        console.log(`   🔊 Tiempo establecido: ${posicion.segundoEnCancion}s`);
+        console.log(`   🔊 Stream: ${shoutcastURL}`);
         
-        // Intentar reproducir inmediatamente
+        // Intentar reproducir
         const playPromise = audioPlayer.play();
         
         if (playPromise !== undefined) {
             playPromise.catch(e => {
-                console.error('❌ Error al reproducir:', e.name);
-                setTimeout(() => {
-                    audioPlayer.play().catch(() => {
-                        setTimeout(siguienteCancion, 1000);
-                    });
-                }, 300);
+                console.error('❌ Error ShoutCast:', e.name);
+                // Si ShoutCast falla, cambiar a local
+                useShoutcast = false;
+                errorCount++;
+                updateLiveIndicator(false);
+                
+                if (errorCount < MAX_ERRORS) {
+                    showStreamNotification('🔄 Cambiando a Playlist Local', false);
+                    setTimeout(() => {
+                        playLocal();
+                    }, 2000);
+                } else {
+                    console.error('🚨 Demasiados errores ShoutCast');
+                    showStreamNotification('⚠️ Error de conexión', false);
+                    isPlaying = false;
+                    updatePlayButton();
+                }
             });
         }
         
-        // Configurar eventos
-        audioPlayer.onloadedmetadata = function() {
-            if (Math.abs(audioPlayer.currentTime - posicion.segundoEnCancion) > 2) {
-                audioPlayer.currentTime = Math.min(posicion.segundoEnCancion, 3600);
-            }
-        };
-        
-        audioPlayer.onended = function() {
-            errorCount = 0;
-            console.log('✅ Canción terminada - Siguiente');
-            siguienteCancion();
-        };
-        
+        // Configurar eventos para ShoutCast
         audioPlayer.onerror = function() {
-            console.error('❌ Error de audio');
+            console.error('❌ Error de conexión ShoutCast');
+            useShoutcast = false;
             errorCount++;
+            updateLiveIndicator(false);
             
-            if (errorCount >= MAX_ERRORS) {
-                console.error('🚨 Demasiados errores - Deteniendo');
+            if (errorCount < MAX_ERRORS) {
+                showStreamNotification('🔄 Cambiando a Playlist Local', false);
+                setTimeout(() => {
+                    playLocal();
+                }, 2000);
+            } else {
+                console.error('🚨 Demasiados errores - Modo local');
+                showStreamNotification('💿 Modo Playlist Local', false);
                 isPlaying = false;
                 updatePlayButton();
+                useShoutcast = false;
                 errorCount = 0;
-                return;
             }
-            
-            setTimeout(siguienteCancion, 1000);
         };
+        
+        // ShoutCast es stream continuo, no tiene "ended"
+        audioPlayer.onended = null;
     }
     
-    function siguienteCancion() {
-        if (currentPlaylist.length === 0) return;
+    function playLocal() {
+        if (currentPlaylist.length === 0) {
+            console.error('🚨 Playlist local vacía');
+            showStreamNotification('⚠️ Playlist no disponible', false);
+            isPlaying = false;
+            updatePlayButton();
+            return;
+        }
         
-        errorCount = 0;
-        currentTrackIndex = (currentTrackIndex + 1) % currentPlaylist.length;
-        const track = currentPlaylist[currentTrackIndex];
+        const posicion = calcularPosicionExacta();
+        const track = posicion.track;
         
-        console.log(`⏭️ Siguiente canción: #${currentTrackIndex + 1} (${track.file})`);
+        if (!track) {
+            console.error('🚨 Track no encontrado');
+            siguienteCancion();
+            return;
+        }
+        
+        console.log(`   📀 "${track.file}"`);
+        console.log(`   🎯 Empezando en segundo: ${posicion.segundoEnCancion}`);
         
         // Limpiar eventos
         audioPlayer.onloadedmetadata = null;
         audioPlayer.onerror = null;
         audioPlayer.onended = null;
         
+        // Configurar audio local
         audioPlayer.src = track.path;
-        audioPlayer.currentTime = 0;
+        audioPlayer.currentTime = Math.min(posicion.segundoEnCancion, 3600);
         
-        if (isPlaying) {
-            const playPromise = audioPlayer.play();
-            
-            if (playPromise !== undefined) {
-                playPromise.catch(e => {
-                    console.error('❌ Error:', e.name);
-                    setTimeout(siguienteCancion, 1000);
-                });
-            }
-            
-            audioPlayer.onerror = function() {
-                console.error('❌ Error de audio');
-                errorCount++;
-                
-                if (errorCount >= MAX_ERRORS) {
-                    console.error('🚨 Demasiados errores - Deteniendo');
-                    isPlaying = false;
-                    updatePlayButton();
-                    errorCount = 0;
-                    return;
-                }
-                
+        const playPromise = audioPlayer.play();
+        
+        if (playPromise !== undefined) {
+            playPromise.catch(e => {
+                console.error('❌ Error local:', e.name);
                 setTimeout(siguienteCancion, 1000);
-            };
+            });
+        }
+        
+        audioPlayer.onerror = function() {
+            console.error('❌ Error de audio local');
+            setTimeout(siguienteCancion, 1000);
+        };
+        
+        audioPlayer.onended = function() {
+            siguienteCancion();
+        };
+    }
+    
+    function siguienteCancion() {
+        // Solo en modo local
+        if (!useShoutcast && currentPlaylist.length > 0) {
+            errorCount = 0;
+            currentTrackIndex = (currentTrackIndex + 1) % currentPlaylist.length;
             
-            audioPlayer.onended = function() {
-                errorCount = 0;
-                siguienteCancion();
-            };
+            // Verificar si ShoutCast volvió antes de cambiar de canción
+            checkStreamStatus().then((shoutcastAvailable) => {
+                if (shoutcastAvailable && useShoutcast) {
+                    console.log('🔄 ShoutCast detectado - Cambiando a stream');
+                    showStreamNotification('🎙️ Transmisión en Vivo detectada', true);
+                    playShoutcast();
+                } else {
+                    playLocal();
+                }
+            });
         }
     }
     
@@ -285,6 +480,14 @@ document.addEventListener('DOMContentLoaded', function() {
         playPath.setAttribute('opacity', isPlaying ? '0' : '1');
         pausePath1.setAttribute('opacity', isPlaying ? '1' : '0');
         pausePath2.setAttribute('opacity', isPlaying ? '1' : '0');
+        
+        // Añadir efecto visual cuando inicia
+        if (isPlaying) {
+            playButton.classList.add('radio-iniciando');
+            setTimeout(() => {
+                playButton.classList.remove('radio-iniciando');
+            }, 1000);
+        }
     }
     
     function shareRadio() {
@@ -309,17 +512,16 @@ document.addEventListener('DOMContentLoaded', function() {
             isPlaying = false;
             console.log('⏸️ Pausado');
         } else {
+            isPlaying = true;
+            
             if (!playlistLoaded) {
                 await loadPlaylist();
             }
-            isPlaying = true;
             
-            console.log('▶️ Conectando a transmisión exacta...');
-            console.log('⚡ INICIO RÁPIDO');
+            console.log('▶️ Iniciando radio...');
+            console.log('⚡ Modo automático: ShoutCast → Playlist Local');
             
-            setTimeout(() => {
-                playTransmisionExacta();
-            }, 0);
+            playRadio();
         }
         updatePlayButton();
     });
@@ -328,15 +530,29 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // ========== INICIALIZACIÓN ==========
     async function init() {
-        console.log('🚀 Radio Zara - Versión Final');
-        console.log('🎯 Sincronización exacta por segundo');
+        console.log('🚀 Radio Zara - Versión Híbrida Mejorada');
+        console.log('🎯 Detección automática ShoutCast/Playlist Local');
+        console.log('🎨 Indicadores visuales integrados');
         
-        await loadPlaylist();
+        // Crear indicador visual
+        createStreamIndicator();
+        
+        // Cargar playlist local en segundo plano
+        loadPlaylist();
+        
         generateScheduleCards();
         setInterval(updateDisplayInfo, 60000);
         updateDisplayInfo();
         
-        console.log('✅ Radio lista');
+        // Chequear estado del stream periódicamente
+        checkInterval = setInterval(checkStreamStatus, 60000); // Cada 60 segundos
+        
+        // Chequear estado inicial después de 3 segundos
+        setTimeout(() => {
+            checkStreamStatus();
+        }, 3000);
+        
+        console.log('✅ Radio lista (modo automático activado)');
     }
     
     init();
