@@ -1,4 +1,4 @@
-// radio-zara.js - VERSIÓN FINAL CORREGIDA (INICIO RÁPIDO)
+// radio-zara.js - VERSIÓN CON DETECCIÓN BUTT
 document.addEventListener('DOMContentLoaded', function() {
     const playButton = document.getElementById('radioPlayButton');
     const shareButton = document.getElementById('shareRadioButton');
@@ -17,7 +17,12 @@ document.addEventListener('DOMContentLoaded', function() {
     let playlistLoaded = false;
     let errorCount = 0;
     const MAX_ERRORS = 3;
-
+    
+    // ========== DETECCIÓN BUTT ==========
+    let useShoutcast = false; // false = playlist local, true = ShoutCast
+    const shoutcastURL = "https://radio01.ferozo.com/proxy/ra01001229?mp=/";
+    let checkInterval = null;
+    
     // ========== CONFIGURACIÓN PROGRAMAS ==========
     const programNames = {
         "madrugada": "Radio 404",
@@ -47,6 +52,45 @@ document.addEventListener('DOMContentLoaded', function() {
             {"name": "especial", "displayName": "Especiales txt", "start": "22:00", "end": "00:00"}
         ]
     };
+    
+    // ========== DETECCIÓN DE STREAM BUTT ==========
+    async function checkButtStreaming() {
+        try {
+            const testAudio = new Audio();
+            testAudio.preload = 'none';
+            testAudio.src = shoutcastURL + '?check=' + Date.now();
+            
+            return new Promise((resolve) => {
+                const timeout = setTimeout(() => {
+                    resolve(false); // Timeout = BUTT NO está transmitiendo
+                }, 5000);
+                
+                const cleanup = () => {
+                    clearTimeout(timeout);
+                    testAudio.removeEventListener('loadedmetadata', onSuccess);
+                    testAudio.removeEventListener('error', onError);
+                    testAudio.src = '';
+                };
+                
+                const onSuccess = () => {
+                    cleanup();
+                    resolve(true); // BUTT SÍ está transmitiendo
+                };
+                
+                const onError = () => {
+                    cleanup();
+                    resolve(false); // BUTT NO está transmitiendo
+                };
+                
+                testAudio.addEventListener('loadedmetadata', onSuccess, { once: true });
+                testAudio.addEventListener('error', onError, { once: true });
+                
+                testAudio.load();
+            });
+        } catch {
+            return false;
+        }
+    }
     
     // ========== FUNCIONES PROGRAMA ==========
     function getArgentinaTime() {
@@ -159,104 +203,116 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
     
-    function playTransmisionExacta() {
-        if (currentPlaylist.length === 0) return;
-        
-        const posicion = calcularPosicionExacta();
-        const track = posicion.track;
-        
-        console.log(`🎵 Conectando a transmisión:`);
-        console.log(`   📀 "${track.file}"`);
-        console.log(`   🎯 Empezando en segundo: ${posicion.segundoEnCancion}`);
-        
-        // DETECTAR PLATAFORMAS EXTERNAS Y FORZAR SINCRONIZACIÓN
-        if (window.location.hostname.includes('mytuner-radio.com') || 
-            window.location.hostname.includes('radios-argentinas.org')) {
-            console.log('🔧 PLATAFORMA EXTERNA DETECTADA - Forzando sincronización');
-            audioPlayer.currentTime = posicion.segundoEnCancion;
-            audioPlayer.src = track.path + '?t=' + Date.now(); // Evitar cache
-        }
+    // ========== FUNCIÓN PARA REPRODUCIR SHOUTCAST (BUTT) ==========
+    function playShoutcast() {
+        console.log('🎙️ BUTT transmitiendo - Conectando a ShoutCast');
         
         // Limpiar eventos previos
         audioPlayer.onloadedmetadata = null;
         audioPlayer.onerror = null;
         audioPlayer.onended = null;
         
-        // Configurar audio
-        audioPlayer.src = track.path;
-        audioPlayer.currentTime = Math.min(posicion.segundoEnCancion, 3600);
+        // Configurar ShoutCast
+        audioPlayer.src = shoutcastURL + '?t=' + Date.now();
+        audioPlayer.currentTime = 0;
         
-        console.log(`   🔊 Tiempo establecido: ${posicion.segundoEnCancion}s`);
+        console.log(`   🔊 URL: ${shoutcastURL}`);
         
-        // Intentar reproducir inmediatamente
+        // Intentar reproducir
         const playPromise = audioPlayer.play();
         
         if (playPromise !== undefined) {
             playPromise.catch(e => {
-                console.error('❌ Error al reproducir:', e.name);
+                console.error('❌ Error ShoutCast:', e.name);
+                // Si falla ShoutCast, volver a playlist local
+                useShoutcast = false;
                 setTimeout(() => {
-                    audioPlayer.play().catch(() => {
-                        setTimeout(siguienteCancion, 1000);
-                    });
-                }, 300);
+                    playTransmisionExacta();
+                }, 1000);
             });
         }
         
-        // Configurar eventos
-        audioPlayer.onloadedmetadata = function() {
-            if (Math.abs(audioPlayer.currentTime - posicion.segundoEnCancion) > 2) {
-                audioPlayer.currentTime = Math.min(posicion.segundoEnCancion, 3600);
-            }
-        };
-        
-        audioPlayer.onended = function() {
-            errorCount = 0;
-            console.log('✅ Canción terminada - Siguiente');
-            siguienteCancion();
-        };
-        
+        // Configurar eventos para ShoutCast
         audioPlayer.onerror = function() {
-            console.error('❌ Error de audio');
-            errorCount++;
-            
-            if (errorCount >= MAX_ERRORS) {
-                console.error('🚨 Demasiados errores - Deteniendo');
-                isPlaying = false;
-                updatePlayButton();
-                errorCount = 0;
-                return;
-            }
-            
-            setTimeout(siguienteCancion, 1000);
+            console.error('❌ Error de conexión ShoutCast');
+            // BUTT probablemente dejó de transmitir
+            useShoutcast = false;
+            setTimeout(() => {
+                playTransmisionExacta(); // Volver a playlist local
+            }, 2000);
         };
+        
+        // ShoutCast es stream continuo, no tiene "ended"
+        audioPlayer.onended = null;
     }
     
-    function siguienteCancion() {
-        if (currentPlaylist.length === 0) return;
-        
-        errorCount = 0;
-        currentTrackIndex = (currentTrackIndex + 1) % currentPlaylist.length;
-        const track = currentPlaylist[currentTrackIndex];
-        
-        console.log(`⏭️ Siguiente canción: #${currentTrackIndex + 1} (${track.file})`);
-        
-        // Limpiar eventos
-        audioPlayer.onloadedmetadata = null;
-        audioPlayer.onerror = null;
-        audioPlayer.onended = null;
-        
-        audioPlayer.src = track.path;
-        audioPlayer.currentTime = 0;
-        
-        if (isPlaying) {
+    // ========== FUNCIÓN PRINCIPAL (MODIFICADA) ==========
+    function playTransmisionExacta() {
+        // PRIMERO VERIFICAR SI BUTT ESTÁ TRANSMITIENDO
+        checkButtStreaming().then((buttTransmitting) => {
+            if (buttTransmitting) {
+                useShoutcast = true;
+                playShoutcast();
+                return; // SALIR, NO reproducir playlist local
+            }
+            
+            // SI LLEGA ACÁ, BUTT NO ESTÁ TRANSMITIENDO
+            useShoutcast = false;
+            
+            if (currentPlaylist.length === 0) return;
+            
+            const posicion = calcularPosicionExacta();
+            const track = posicion.track;
+            
+            console.log(`🎵 Conectando a transmisión:`);
+            console.log(`   📀 "${track.file}"`);
+            console.log(`   🎯 Empezando en segundo: ${posicion.segundoEnCancion}`);
+            
+            // DETECTAR PLATAFORMAS EXTERNAS Y FORZAR SINCRONIZACIÓN
+            if (window.location.hostname.includes('mytuner-radio.com') || 
+                window.location.hostname.includes('radios-argentinas.org')) {
+                console.log('🔧 PLATAFORMA EXTERNA DETECTADA - Forzando sincronización');
+                audioPlayer.currentTime = posicion.segundoEnCancion;
+                audioPlayer.src = track.path + '?t=' + Date.now(); // Evitar cache
+            }
+            
+            // Limpiar eventos previos
+            audioPlayer.onloadedmetadata = null;
+            audioPlayer.onerror = null;
+            audioPlayer.onended = null;
+            
+            // Configurar audio
+            audioPlayer.src = track.path;
+            audioPlayer.currentTime = Math.min(posicion.segundoEnCancion, 3600);
+            
+            console.log(`   🔊 Tiempo establecido: ${posicion.segundoEnCancion}s`);
+            
+            // Intentar reproducir inmediatamente
             const playPromise = audioPlayer.play();
             
             if (playPromise !== undefined) {
                 playPromise.catch(e => {
-                    console.error('❌ Error:', e.name);
-                    setTimeout(siguienteCancion, 1000);
+                    console.error('❌ Error al reproducir:', e.name);
+                    setTimeout(() => {
+                        audioPlayer.play().catch(() => {
+                            setTimeout(siguienteCancion, 1000);
+                        });
+                    }, 300);
                 });
             }
+            
+            // Configurar eventos
+            audioPlayer.onloadedmetadata = function() {
+                if (Math.abs(audioPlayer.currentTime - posicion.segundoEnCancion) > 2) {
+                    audioPlayer.currentTime = Math.min(posicion.segundoEnCancion, 3600);
+                }
+            };
+            
+            audioPlayer.onended = function() {
+                errorCount = 0;
+                console.log('✅ Canción terminada - Siguiente');
+                siguienteCancion();
+            };
             
             audioPlayer.onerror = function() {
                 console.error('❌ Error de audio');
@@ -272,12 +328,70 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 setTimeout(siguienteCancion, 1000);
             };
+        });
+    }
+    
+    // ========== SIGUIENTE CANCIÓN (MODIFICADA) ==========
+    function siguienteCancion() {
+        // PRIMERO VERIFICAR SI BUTT ESTÁ TRANSMITIENDO
+        checkButtStreaming().then((buttTransmitting) => {
+            if (buttTransmitting) {
+                console.log('🔄 BUTT detectado durante cambio de canción');
+                useShoutcast = true;
+                playShoutcast();
+                return; // SALIR, NO cambiar canción local
+            }
             
-            audioPlayer.onended = function() {
-                errorCount = 0;
-                siguienteCancion();
-            };
-        }
+            // SI LLEGA ACÁ, BUTT NO ESTÁ TRANSMITIENDO
+            useShoutcast = false;
+            
+            if (currentPlaylist.length === 0) return;
+            
+            errorCount = 0;
+            currentTrackIndex = (currentTrackIndex + 1) % currentPlaylist.length;
+            const track = currentPlaylist[currentTrackIndex];
+            
+            console.log(`⏭️ Siguiente canción: #${currentTrackIndex + 1} (${track.file})`);
+            
+            // Limpiar eventos
+            audioPlayer.onloadedmetadata = null;
+            audioPlayer.onerror = null;
+            audioPlayer.onended = null;
+            
+            audioPlayer.src = track.path;
+            audioPlayer.currentTime = 0;
+            
+            if (isPlaying) {
+                const playPromise = audioPlayer.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise.catch(e => {
+                        console.error('❌ Error:', e.name);
+                        setTimeout(siguienteCancion, 1000);
+                    });
+                }
+                
+                audioPlayer.onerror = function() {
+                    console.error('❌ Error de audio');
+                    errorCount++;
+                    
+                    if (errorCount >= MAX_ERRORS) {
+                        console.error('🚨 Demasiados errores - Deteniendo');
+                        isPlaying = false;
+                        updatePlayButton();
+                        errorCount = 0;
+                        return;
+                    }
+                    
+                    setTimeout(siguienteCancion, 1000);
+                };
+                
+                audioPlayer.onended = function() {
+                    errorCount = 0;
+                    siguienteCancion();
+                };
+            }
+        });
     }
     
     function updatePlayButton() {
@@ -314,8 +428,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             isPlaying = true;
             
-            console.log('▶️ Conectando a transmisión exacta...');
-            console.log('⚡ INICIO RÁPIDO');
+            console.log('▶️ Iniciando radio...');
+            console.log('⚡ Modo automático: Playlist Local ←→ BUTT ShoutCast');
             
             setTimeout(() => {
                 playTransmisionExacta();
@@ -328,15 +442,33 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // ========== INICIALIZACIÓN ==========
     async function init() {
-        console.log('🚀 Radio Zara - Versión Final');
+        console.log('🚀 Radio Zara - Versión con Detección BUTT');
         console.log('🎯 Sincronización exacta por segundo');
+        console.log('📡 Detección automática de transmisión BUTT');
         
         await loadPlaylist();
         generateScheduleCards();
         setInterval(updateDisplayInfo, 60000);
         updateDisplayInfo();
         
-        console.log('✅ Radio lista');
+        // CHEQUEAR BUTT CADA 30 SEGUNDOS (SOLO CUANDO ESTÁ REPRODUCIENDO)
+        checkInterval = setInterval(() => {
+            if (isPlaying) {
+                checkButtStreaming().then((buttTransmitting) => {
+                    if (buttTransmitting && !useShoutcast) {
+                        console.log('🔄 BUTT detectado - Cambiando automáticamente a ShoutCast');
+                        useShoutcast = true;
+                        playShoutcast();
+                    } else if (!buttTransmitting && useShoutcast) {
+                        console.log('🔁 BUTT desconectado - Volviendo automáticamente a Playlist Local');
+                        useShoutcast = false;
+                        playTransmisionExacta();
+                    }
+                });
+            }
+        }, 30000); // Cada 30 segundos
+        
+        console.log('✅ Radio lista con detección automática BUTT');
     }
     
     init();
