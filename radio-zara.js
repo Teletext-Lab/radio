@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // ========== DETECCIÓN BUTT ==========
     let useShoutcast = false; // false = playlist local, true = ShoutCast
-    const shoutcastURL = "https://radio01.ferozo.com/proxy/ra01001229?mp=/";
+    const shoutcastURL = "http://radio01.ferozo.com:9694/stream";
     let checkInterval = null;
     
     // ========== CONFIGURACIÓN PROGRAMAS ==========
