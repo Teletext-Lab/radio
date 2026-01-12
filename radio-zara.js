@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // ========== DETECCIÓN BUTT ==========
     let modoButt = false; // false = playlist, true = BUTT
-    const URL_BUTT = "https://radio01.ferozo.com/proxy/ra01001229?mp=/";
+    const URL_BUTT = "https://radio01.ferozo.com/proxy/ra01001229?mp=/stream";
     let checkInterval = null;
     
     // ========== CONFIGURACIÓN PROGRAMAS ==========
@@ -55,32 +55,37 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // ========== DETECCIÓN BUTT ==========
     async function detectarButt() {
-        try {
-            const test = new Audio();
-            test.src = URL_BUTT + '?check=' + Date.now();
-            test.preload = 'none';
-            
-            return new Promise((resolve) => {
-                const timeout = setTimeout(() => {
-                    resolve(false); // Timeout = BUTT no está transmitiendo
-                }, 8000);
-                
-                test.onloadedmetadata = () => {
-                    clearTimeout(timeout);
-                    resolve(true); // BUTT SÍ está transmitiendo
-                };
-                
-                test.onerror = () => {
-                    clearTimeout(timeout);
-                    resolve(false); // BUTT NO está transmitiendo
-                };
-                
-                test.load();
-            });
-        } catch {
-            return false;
-        }
+    try {
+        const test = new Audio();
+        test.src = URL_BUTT + '&check=' + Date.now();
+        test.preload = 'none';
+        test.muted = true;
+
+        return new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+                test.src = '';
+                resolve(false);
+            }, 5000);
+
+            test.onloadedmetadata = () => {
+                clearTimeout(timeout);
+                test.src = '';
+                resolve(true);
+            };
+
+            test.onerror = () => {
+                clearTimeout(timeout);
+                test.src = '';
+                resolve(false);
+            };
+
+            test.load();
+        });
+    } catch (e) {
+        return false;
     }
+}
+
     
     // ========== FUNCIONES PROGRAMA ==========
     function getArgentinaTime() {
