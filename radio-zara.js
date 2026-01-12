@@ -54,37 +54,75 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     
     // ========== DETECCIÓN BUTT ==========
-    async function detectarButt() {
-    try {
-        const test = new Audio();
-        test.src = URL_BUTT + '&check=' + Date.now();
-        test.preload = 'none';
-        test.muted = true;
+    async function playTransmisionExacta() {
+    // 1️⃣ Detectar si BUTT está activo
+    const buttActivo = await detectarButt();
 
-        return new Promise((resolve) => {
-            const timeout = setTimeout(() => {
-                test.src = '';
-                resolve(false);
-            }, 5000);
-
-            test.onloadedmetadata = () => {
-                clearTimeout(timeout);
-                test.src = '';
-                resolve(true);
-            };
-
-            test.onerror = () => {
-                clearTimeout(timeout);
-                test.src = '';
-                resolve(false);
-            };
-
-            test.load();
-        });
-    } catch (e) {
-        return false;
+    // ====== MODO LIVE ======
+    if (buttActivo) {
+        modoButt = true;
+        console.log('🔴 BUTT activo - Transmisión en vivo');
+        audioPlayer.onloadedmetadata = null;
+        audioPlayer.onerror = null;
+        audioPlayer.onended = null;
+        audioPlayer.src = URL_BUTT + '&t=' + Date.now();
+        audioPlayer.play().catch(() => {});
+        return;
     }
+
+    // ====== MODO PLAYLIST (RADIO SIMULADA) ======
+    modoButt = false;
+
+    if (currentPlaylist.length === 0) return;
+
+    const posicion = calcularPosicionExacta();
+    const track = posicion.track;
+    const segundo = posicion.segundoEnCancion;
+
+    console.log('🎵 Radio simulada');
+    console.log(`   📀 ${track.file}`);
+    console.log(`   ⏱️ segundo global: ${segundo}`);
+
+    // Limpiar eventos previos
+    audioPlayer.pause();
+    audioPlayer.onloadedmetadata = null;
+    audioPlayer.onerror = null;
+    audioPlayer.onended = null;
+
+    // 🔴 CLAVE: setear src pero NO play todavía
+    audioPlayer.src = track.path + '?t=' + Date.now();
+
+    audioPlayer.onloadedmetadata = function () {
+        try {
+            audioPlayer.currentTime = Math.min(
+                segundo,
+                isFinite(audioPlayer.duration) ? audioPlayer.duration - 1 : segundo
+            );
+        } catch (e) {}
+
+        audioPlayer.play().catch(() => {});
+    };
+
+    audioPlayer.onended = function () {
+        errorCount = 0;
+        siguienteCancion();
+    };
+
+    audioPlayer.onerror = function () {
+        errorCount++;
+        console.error('❌ Error de audio');
+
+        if (errorCount >= MAX_ERRORS) {
+            isPlaying = false;
+            updatePlayButton();
+            errorCount = 0;
+            return;
+        }
+
+        setTimeout(siguienteCancion, 1000);
+    };
 }
+
 
     
     // ========== FUNCIONES PROGRAMA ==========
