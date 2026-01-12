@@ -1,4 +1,4 @@
-// radio-zara.js - VERSIÓN CON DETECCIÓN AUTOMÁTICA TRANSPARENTE
+// radio-zara.js - VERSIÓN FINAL CORREGIDA (INICIO RÁPIDO)
 document.addEventListener('DOMContentLoaded', function() {
     const playButton = document.getElementById('radioPlayButton');
     const shareButton = document.getElementById('shareRadioButton');
@@ -17,12 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let playlistLoaded = false;
     let errorCount = 0;
     const MAX_ERRORS = 3;
-    
-    // ========== DETECCIÓN BUTT ==========
-    let modoButt = false; // false = playlist, true = BUTT
-    const URL_BUTT = "https://radio01.ferozo.com/proxy/ra01001229?mp=/stream";
-    let checkInterval = null;
-    
+
     // ========== CONFIGURACIÓN PROGRAMAS ==========
     const programNames = {
         "madrugada": "Radio 404",
@@ -52,78 +47,6 @@ document.addEventListener('DOMContentLoaded', function() {
             {"name": "especial", "displayName": "Especiales txt", "start": "22:00", "end": "00:00"}
         ]
     };
-    
-    // ========== DETECCIÓN BUTT ==========
-    async function playTransmisionExacta() {
-    // 1️⃣ Detectar si BUTT está activo
-    const buttActivo = await detectarButt();
-
-    // ====== MODO LIVE ======
-    if (buttActivo) {
-        modoButt = true;
-        console.log('🔴 BUTT activo - Transmisión en vivo');
-        audioPlayer.onloadedmetadata = null;
-        audioPlayer.onerror = null;
-        audioPlayer.onended = null;
-        audioPlayer.src = URL_BUTT + '&t=' + Date.now();
-        audioPlayer.play().catch(() => {});
-        return;
-    }
-
-    // ====== MODO PLAYLIST (RADIO SIMULADA) ======
-    modoButt = false;
-
-    if (currentPlaylist.length === 0) return;
-
-    const posicion = calcularPosicionExacta();
-    const track = posicion.track;
-    const segundo = posicion.segundoEnCancion;
-
-    console.log('🎵 Radio simulada');
-    console.log(`   📀 ${track.file}`);
-    console.log(`   ⏱️ segundo global: ${segundo}`);
-
-    // Limpiar eventos previos
-    audioPlayer.pause();
-    audioPlayer.onloadedmetadata = null;
-    audioPlayer.onerror = null;
-    audioPlayer.onended = null;
-
-    // 🔴 CLAVE: setear src pero NO play todavía
-    audioPlayer.src = track.path + '?t=' + Date.now();
-
-    audioPlayer.onloadedmetadata = function () {
-        try {
-            audioPlayer.currentTime = Math.min(
-                segundo,
-                isFinite(audioPlayer.duration) ? audioPlayer.duration - 1 : segundo
-            );
-        } catch (e) {}
-
-        audioPlayer.play().catch(() => {});
-    };
-
-    audioPlayer.onended = function () {
-        errorCount = 0;
-        siguienteCancion();
-    };
-
-    audioPlayer.onerror = function () {
-        errorCount++;
-        console.error('❌ Error de audio');
-
-        if (errorCount >= MAX_ERRORS) {
-            isPlaying = false;
-            updatePlayButton();
-            errorCount = 0;
-            return;
-        }
-
-        setTimeout(siguienteCancion, 1000);
-    };
-}
-
-
     
     // ========== FUNCIONES PROGRAMA ==========
     function getArgentinaTime() {
@@ -236,24 +159,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
     
-    async function playTransmisionExacta() {
-        // PRIMERO VERIFICAR SI BUTT ESTÁ TRANSMITIENDO
-        const buttActivo = await detectarButt();
-        
-        if (buttActivo && !modoButt) {
-            modoButt = true;
-            console.log('🔴 BUTT detectado - Cambiando a transmisión en vivo');
-            audioPlayer.src = URL_BUTT + '?t=' + Date.now();
-            audioPlayer.play();
-            return;
-        }
-        
-        if (!buttActivo && modoButt) {
-            modoButt = false;
-            console.log('🟢 BUTT desconectado - Continuando con playlist');
-        }
-        
-        // SI LLEGA ACÁ, REPRODUCIR PLAYLIST NORMAL
+    function playTransmisionExacta() {
         if (currentPlaylist.length === 0) return;
         
         const posicion = calcularPosicionExacta();
@@ -268,7 +174,7 @@ document.addEventListener('DOMContentLoaded', function() {
             window.location.hostname.includes('radios-argentinas.org')) {
             console.log('🔧 PLATAFORMA EXTERNA DETECTADA - Forzando sincronización');
             audioPlayer.currentTime = posicion.segundoEnCancion;
-            audioPlayer.src = track.path + '?t=' + Date.now();
+            audioPlayer.src = track.path + '?t=' + Date.now(); // Evitar cache
         }
         
         // Limpiar eventos previos
@@ -325,23 +231,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
     
-    async function siguienteCancion() {
-        // VERIFICAR SI BUTT ESTÁ TRANSMITIENDO
-        const buttActivo = await detectarButt();
-        
-        if (buttActivo && !modoButt) {
-            modoButt = true;
-            console.log('🔄 BUTT detectado durante cambio de canción');
-            audioPlayer.src = URL_BUTT + '?t=' + Date.now();
-            audioPlayer.play();
-            return;
-        }
-        
-        if (!buttActivo && modoButt) {
-            modoButt = false;
-            console.log('🔄 BUTT se fue, continuando playlist');
-        }
-        
+    function siguienteCancion() {
         if (currentPlaylist.length === 0) return;
         
         errorCount = 0;
@@ -424,8 +314,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             isPlaying = true;
             
-            console.log('▶️ Iniciando radio...');
-            console.log('⚡ Sistema automático: Playlist ←→ BUTT (transparente)');
+            console.log('▶️ Conectando a transmisión exacta...');
+            console.log('⚡ INICIO RÁPIDO');
             
             setTimeout(() => {
                 playTransmisionExacta();
@@ -438,34 +328,15 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // ========== INICIALIZACIÓN ==========
     async function init() {
-        console.log('🚀 Radio Zara - Detección Automática Transparente');
+        console.log('🚀 Radio Zara - Versión Final');
         console.log('🎯 Sincronización exacta por segundo');
-        console.log('📡 Detección BUTT automática (cada 30 segundos)');
         
         await loadPlaylist();
         generateScheduleCards();
         setInterval(updateDisplayInfo, 60000);
         updateDisplayInfo();
         
-        // CHEQUEO AUTOMÁTICO CADA 30 SEGUNDOS
-        checkInterval = setInterval(async () => {
-            if (!isPlaying) return;
-            
-            const buttActivo = await detectarButt();
-            
-            if (buttActivo && !modoButt) {
-                modoButt = true;
-                console.log('🔄 Cambio automático detectado: Playlist → BUTT');
-                audioPlayer.src = URL_BUTT + '?t=' + Date.now();
-                audioPlayer.play();
-            } else if (!buttActivo && modoButt) {
-                modoButt = false;
-                console.log('🔄 Cambio automático detectado: BUTT → Playlist');
-                playTransmisionExacta();
-            }
-        }, 30000);
-        
-        console.log('✅ Radio lista (detección automática activa)');
+        console.log('✅ Radio lista');
     }
     
     init();
