@@ -1,47 +1,30 @@
-![ff](https://github.com/user-attachments/assets/c1308d28-2560-451f-a4f5-eb1f7b7f1333)
+TELETEXT RADIO ONLINE
 
+Teletext Radio es un **proyecto experimental de desarrollo tecnológico** enfocado en la creación de una plataforma de transmisión de audio. Actualmente se encuentra **en fase de pruebas técnicas**.
 
+**ESTADO LEGAL IMPORTANTE:**
+- Este es un proyecto de **desarrollo de software**, no un servicio de streaming activo.
+- Cualquier contenido de audio utilizado durante el desarrollo es **exclusivamente con fines de prueba técnica**.
+- El software está diseñado para funcionar con **contenido bajo licencias apropiadas** o **material de dominio público**.
 
-# TELETEXT RADIO ONLINE
+**DESARROLLO TECNOLÓGICO:**
+Funcionalidades en desarrollo:
+- Arquitectura de reproductor de audio online
+- Pruebas de interfaz responsive
+- Sistema de gestión de listas de reproducción (tecnología base)
+- Modos de visualización (oscuro/claro)
 
-Teletext Radio es un proyecto en desarrollo, pensado para transmisión de música y contenido en vivo. 
-La plataforma busca ser simple, clara y funcional, con control manual de reproducción y soporte responsive para distintos dispositivos.
-
-
-## Estado del Proyecto
-Actualmente en construcción. 
-
-## Funcionalidades principales pendientes:
-
-*Reproductor de música online. 
-* Listas de reproducción y streaming en vivo. 
-* Modo oscuro activable. 
-* Optimización responsive para móvil y escritorio. 
-
-Próximamente: configuración de listas de reproducción y streaming.
-
-
-## Contribuciones
-
+**CONTRIBUCIONES:**
 Se aceptan contribuciones para:
-* Mejoras en la interfaz y experiencia de usuario.
-* Integración completa del reproductor.
-* Soporte responsive y modo oscuro.
+- Mejoras en interfaces y experiencia de usuario
+- Optimizaciones técnicas
+- Documentación
 
-## Contacto
-Para dudas o sugerencias: ripgordonestudio@gmail.com
+**AVISO LEGAL CRÍTICO:**
+Este proyecto no incluye ni distribuye contenido musical protegido por derechos de autor. Cualquier uso de esta plataforma para transmisión de contenido requiere que el usuario obtenga las **licencias correspondientes de las entidades gestoras de derechos (SGAE, BMI, ASCAP, etc.) según su jurisdicción**.
 
+**CONTACTO:** [ripgordonestudio@gmail.com]
 
-# PUEDES APOYAR ESTE PROYECTO:
+PUEDES APOYAR EL DESARROLLO TECNOLÓGICO:
 Donando lo que puedas <3
-
-## Alias: CYBERESPACIO
-
-GRACIAS.
-
-
-
-
-
-
-
+Alias: CYBERESPACIO
